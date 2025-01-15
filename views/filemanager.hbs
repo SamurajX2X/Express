@@ -1,0 +1,15 @@
+<h2>File Manager</h2>
+<ul>
+    {{#each filesData}}
+    <li>
+        <i class="{{fileIcon this.name}}"></i>
+        <span>ID: {{this.id}} | Plik: {{this.name}}</span>
+        <div class="actions">
+            <a href="/show/{{this.id}}" class="btn">Pokaż</a>
+            <a href="/delete/{{this.id}}" class="btn danger">Usuń</a>
+            <a href="/download/{{this.id}}" class="btn">Pobierz</a>
+            <a href="/info/{{this.id}}" class="btn">Szczegóły</a>
+        </div>
+    </li>
+    {{/each}}
+</ul>
