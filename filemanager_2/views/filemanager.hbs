@@ -1,0 +1,23 @@
+<form action="/upload" method="POST" enctype="multipart/form-data" class="upload-form">
+    <label for="file-input" class="file-label">Wybierz pliki</label>
+    <input type="file" id="file-input" name="file" multiple required class="file-input">
+    <button type="submit" class="upload-button">Prześlij pliki</button>
+</form>
+
+
+</header>
+<h2>Folders</h2>
+<ul>
+
+    {{#each folders}}
+    <li>
+
+    </li>
+    {{/each}}
+</ul>
+<h2>Files</h2>
+<ul>
+    {{#each files}}
+
+    {{/each}}
+</ul>
