@@ -1,0 +1,13 @@
+{
+    "assets": {
+        "colors": {
+            "red": "#FF0000",
+            "green": "#00FF00",
+            "blue": "#0000FF"
+        }
+    },
+    "settings": {
+        "backgroundColor": "#FFFFFF",
+        "fontSize": 16
+    }
+}

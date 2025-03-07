@@ -1,23 +1,141 @@
-<form action="/upload" method="POST" enctype="multipart/form-data" class="upload-form">
-    <label for="file-input" class="file-label">Wybierz pliki</label>
-    <input type="file" id="file-input" name="file" multiple required class="file-input">
-    <button type="submit" class="upload-button">Prześlij pliki</button>
-</form>
+<div class="container">
+    <div class="path">
+        {{#if path}}
+        <span>Ścieżka ||</span>
+        {{#each path}}
+        <a href="/?root={{path}}">{{name}}</a>
+        {{#unless @last}} / {{/unless}}
+        {{/each}}
+        {{else}}
+        <span>Ścieżka: /</span>
+        {{/if}}
+    </div>
 
+    <div class="toolbar">
+        <button class="btn" onclick="document.getElementById('createDirDialog').showModal()">
+            <i class="gg-folder-add"></i> Nowy katalog
+        </button>
+        <button class="btn" onclick="document.getElementById('createFileDialog').showModal()">
+            <i class="gg-file-add"></i> Nowy plik
+        </button>
+        <button class="btn" onclick="document.getElementById('uploadDialog').showModal()">
+            <i class="gg-software-upload"></i> Prześlij plik
+        </button>
+    </div>
 
-</header>
-<h2>Folders</h2>
-<ul>
+    <!-- Sekcje na foldery i pliki -->
+    <div class="filecontent">
+        <aside class="folders">
+            <h2>Foldery</h2>
+            <ul>
+                {{#each content}}
+                {{#if isDir}}
+                <li>
+                    <span>
+                        <i class="gg-folder"></i>
+                        <a href="/?root={{path}}">{{name}}</a>
+                    </span>
+                    <div class="actions">
+                        <form action="/delete-directory" method="POST" style="display:inline;">
+                            <input type="hidden" name="dirname" value="{{name}}">
+                            <input type="hidden" name="root" value="{{../root}}">
+                            <button type="submit">Usuń</button>
+                        </form>
+                        <button class="btn"
+                            onclick="document.getElementById('renameDialog-{{@index}}').showModal()">Zmień
+                            nazwę</button>
+                        <dialog id="renameDialog-{{@index}}" class="rename-dialog">
+                            <h2>Zmień nazwę folderu</h2>
+                            <form action="/rename" method="POST">
+                                <input type="hidden" name="root" value="{{root}}">
+                                <input type="hidden" name="oldName" value="{{name}}">
+                                <input type="hidden" name="isDir" value="true">
+                                <input type="text" name="newName" placeholder="Nowa nazwa" required>
+                                <button type="submit">Zmień</button>
+                                <button type="button"
+                                    onclick="document.getElementById('renameDialog-{{@index}}').close()">Anuluj</button>
+                            </form>
+                        </dialog>
+                    </div>
+                </li>
+                {{/if}}
+                {{/each}}
+            </ul>
+        </aside>
 
-    {{#each folders}}
-    <li>
+        <aside class="files">
+            <h2>Pliki</h2>
+            <ul>
+                {{#each content}}
+                {{#unless isDir}}
+                <li>
+                    <span>
+                        <i class="gg {{fileIcon name}}"></i> {{name}}
+                    </span>
+                    <div class="actions">
+                        <a href="/edit?file={{path}}" class="btn">Edit</a>
+                        <form action="/delete-file" method="POST" style="display:inline;">
+                            <input type="hidden" name="filename" value="{{name}}">
+                            <input type="hidden" name="root" value="{{../root}}">
+                            <button type="submit">Usuń</button>
+                        </form>
+                        <button class="btn"
+                            onclick="document.getElementById('renameDialog-{{@index}}').showModal()">Zmień
+                            nazwę</button>
+                        <dialog id="renameDialog-{{@index}}" class="rename-dialog">
+                            <h2>Zmień nazwę pliku</h2>
+                            <form action="/rename" method="POST">
+                                <input type="hidden" name="root" value="{{root}}">
+                                <input type="hidden" name="oldName" value="{{name}}">
+                                <input type="hidden" name="isDir" value="false">
+                                <input type="text" name="newName" placeholder="Nowa nazwa" required>
+                                <button type="submit">Zmień</button>
+                                <button type="button"
+                                    onclick="document.getElementById('renameDialog-{{@index}}').close()">Anuluj</button>
+                            </form>
+                        </dialog>
+                    </div>
+                </li>
+                {{/unless}}
+                {{/each}}
+            </ul>
+        </aside>
+    </div>
 
-    </li>
-    {{/each}}
-</ul>
-<h2>Files</h2>
-<ul>
-    {{#each files}}
+    <!-- Dialogi -->
+    <dialog id="createDirDialog">
+        <h2>Nowy katalog</h2>
+        <form action="/create-directory" method="POST">
+            <input type="hidden" name="root" value="{{root}}">
+            <input type="text" name="folder" placeholder="Nazwa katalogu" required>
+            <button type="submit">Utwórz</button>
+            <button type="button" onclick="document.getElementById('createDirDialog').close()">Anuluj</button>
+        </form>
+    </dialog>
 
-    {{/each}}
-</ul>
+    <dialog id="createFileDialog">
+        <h2>Nowy plik</h2>
+        <form action="/create-file" method="POST">
+            <input type="hidden" name="root" value="{{root}}">
+            <input type="text" name="filename" placeholder="Nazwa pliku" required>
+            <select name="fileType">
+                <option value="css">CSS</option>
+                <option value="js">JavaScript</option>
+                <option value="json">JSON</option>
+                <option value="html">HTML</option>
+            </select>
+            <button type="submit">Utwórz</button>
+            <button type="button" onclick="document.getElementById('createFileDialog').close()">Anuluj</button>
+        </form>
+    </dialog>
+
+    <dialog id="uploadDialog">
+        <h2>Upload pliku</h2>
+        <form action="/upload" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="root" value="{{root}}">
+            <input type="file" name="file" multiple required>
+            <button type="submit">Prześlij</button>
+            <button type="button" onclick="document.getElementById('uploadDialog').close()">Anuluj</button>
+        </form>
+    </dialog>
+</div>

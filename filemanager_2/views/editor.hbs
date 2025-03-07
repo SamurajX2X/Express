@@ -1,0 +1,66 @@
+<h2>Edytujesz: {{file}}</h2>
+<nav class="navbar">
+    <a id="backhref" href="/?root={{root}}">Powrót</a>
+    <button id="save-settings">Zapisz ustawienia</button>
+    <div id="config">
+        <button class="btn" id="font-decrement">-</button>
+        <button class="btn" id="colors">Kolory</button>
+        <button class="btn" id="font-increment">+</button>
+    </div>
+    <form action="/saveFile" method="post">
+        <input type="hidden" name="filename" value="{{file}}">
+        <input type="hidden" name="root" value="{{../root}}">
+        <input class="btn" type="submit" value="Zapisz">
+</nav>
+
+<main id="main-edit">
+    <div class="lines">
+    </div>
+    <textarea name="content" id="txt-editor">{{content}}</textarea>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", checkRows);
+        document.getElementById("txt-editor").addEventListener('keyup', checkRows);
+
+        function checkRows(e) {
+            let lines = document.getElementById("txt-editor").value.split("\n");
+            let content = Array.from(lines).join("\n");
+            let num = document.querySelector(".lines");
+            num.innerHTML = "";
+            lines.forEach((line, index) => {
+                let lineElement = document.createElement("div");
+                lineElement.textContent = index;
+                lineElement.classList.add("line");
+                num.appendChild(lineElement);
+            });
+        }
+
+        const lines = document.querySelector('.lines');
+        const editor = document.querySelector('#txt-editor');
+        editor.addEventListener('scroll', () => {
+            lines.scrollTop = editor.scrollTop;
+        });
+
+        const fontDecrement = document.getElementById('font-decrement');
+        const fontIncrement = document.getElementById('font-increment');
+        const colors = document.getElementById('colors');
+
+        fontDecrement.addEventListener('click', () => {
+            const style = window.getComputedStyle(editor, null).getPropertyValue('font-size');
+            const currentSize = parseFloat(style);
+            editor.style.fontSize = (currentSize - 1) + 'px';
+            lines.style.fontSize = (currentSize - 1) + 'px';
+        });
+
+        fontIncrement.addEventListener('click', () => {
+            const style = window.getComputedStyle(editor, null).getPropertyValue('font-size');
+            const currentSize = parseFloat(style);
+            editor.style.fontSize = (currentSize + 1) + 'px';
+            lines.style.fontSize = (currentSize + 1) + 'px';
+            console.log(currentSize + 'px');
+        });
+
+
+    </script>
+</main>
+</form>
