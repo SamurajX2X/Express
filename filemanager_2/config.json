@@ -1,13 +1,43 @@
 {
-    "assets": {
-        "colors": {
-            "red": "#FF0000",
-            "green": "#00FF00",
-            "blue": "#0000FF"
+    "themes": {
+        "default": {
+            "textColor": "antiquewhite",
+            "backgroundColor": "#1c1d1f"
+        },
+        "dark": {
+            "textColor": "#FFFFFF",
+            "backgroundColor": "#000000"
+        },
+        "light": {
+            "textColor": "#000000",
+            "backgroundColor": "#FFFFFF"
         }
     },
     "settings": {
-        "backgroundColor": "#FFFFFF",
-        "fontSize": 16
-    }
+        "textColor": "#FFFFFF",
+        "backgroundColor": "#000000",
+        "fontSize": 18
+    },
+    "filters": [
+        {
+            "name": "grayscale"
+        },
+        {
+            "name": "invert"
+        },
+        {
+            "name": "sepia"
+        },
+        {
+            "name": "blur",
+            "value": "5px"
+        },
+        {
+            "name": "brightness",
+            "value": "150%"
+        },
+        {
+            "name": "none"
+        }
+    ]
 }

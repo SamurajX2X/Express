@@ -47,7 +47,7 @@
                         <dialog id="renameDialog-{{@index}}" class="rename-dialog">
                             <h2>Zmień nazwę folderu</h2>
                             <form action="/rename" method="POST">
-                                <input type="hidden" name="root" value="{{root}}">
+                                <input type="hidden" name="root" value="{{../root}}">
                                 <input type="hidden" name="oldName" value="{{name}}">
                                 <input type="hidden" name="isDir" value="true">
                                 <input type="text" name="newName" placeholder="Nowa nazwa" required>
@@ -73,7 +73,11 @@
                         <i class="gg {{fileIcon name}}"></i> {{name}}
                     </span>
                     <div class="actions">
+                        {{#if (eq (fileIcon name) "gg-image")}}
+                        <a href="/photo-edit?file={{path}}" class="btn">Edit</a>
+                        {{else}}
                         <a href="/edit?file={{path}}" class="btn">Edit</a>
+                        {{/if}}
                         <form action="/delete-file" method="POST" style="display:inline;">
                             <input type="hidden" name="filename" value="{{name}}">
                             <input type="hidden" name="root" value="{{../root}}">

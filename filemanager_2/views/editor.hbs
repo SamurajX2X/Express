@@ -1,12 +1,25 @@
 <h2>Edytujesz: {{file}}</h2>
 <nav class="navbar">
-    <a id="backhref" href="/?root={{root}}">Powrót</a>
+    <a id="backhref" href="/?root={{./root}}">Powrót</a>
     <button id="save-settings">Zapisz ustawienia</button>
     <div id="config">
         <button class="btn" id="font-decrement">-</button>
         <button class="btn" id="colors">Kolory</button>
         <button class="btn" id="font-increment">+</button>
     </div>
+    <button class="btn" onclick="document.getElementById('renameDialog-{{@index}}').showModal()">Zmień
+        nazwę</button>
+    <dialog id="renameDialog-{{@index}}" class="rename-dialog">
+        <h2>Zmień nazwę folderu</h2>
+        <form action="/file-rename" method="POST">
+            <input type="hidden" name="root" value="{{root}}">
+            <input type="hidden" name="oldName" value="{{file}}">
+            <input type="text" name="newName" placeholder="Nowa nazwa" required>
+            <button type="submit">Zmień</button>
+            <button type="button" onclick="document.getElementById('renameDialog-{{@index}}').close()">Anuluj</button>
+        </form>
+    </dialog>
+
     <form action="/saveFile" method="post">
         <input type="hidden" name="filename" value="{{file}}">
         <input type="hidden" name="root" value="{{../root}}">
@@ -14,53 +27,152 @@
 </nav>
 
 <main id="main-edit">
-    <div class="lines">
-    </div>
+    <div class="lines"></div>
     <textarea name="content" id="txt-editor">{{content}}</textarea>
+    </form>
 
     <script>
-        document.addEventListener("DOMContentLoaded", checkRows);
-        document.getElementById("txt-editor").addEventListener('keyup', checkRows);
+        const editor = document.querySelector('#txt-editor');
+        const lines = document.querySelector('.lines');
+        const colorsBtn = document.getElementById('colors');
+        const fontDecrement = document.getElementById('font-decrement');
+        const fontIncrement = document.getElementById('font-increment');
+        const saveSettingsBtn = document.getElementById('save-settings');
 
-        function checkRows(e) {
-            let lines = document.getElementById("txt-editor").value.split("\n");
-            let content = Array.from(lines).join("\n");
-            let num = document.querySelector(".lines");
-            num.innerHTML = "";
-            lines.forEach((line, index) => {
-                let lineElement = document.createElement("div");
-                lineElement.textContent = index;
+
+
+
+        function checkRows() {
+            const editors = editor.value.split("\n");
+            lines.innerHTML = "";
+            editors.forEach((line, index) => {
+                const lineElement = document.createElement("div");
+                lineElement.textContent = index + 1; // Numeracja od 1
                 lineElement.classList.add("line");
-                num.appendChild(lineElement);
+                lines.appendChild(lineElement);
             });
         }
 
-        const lines = document.querySelector('.lines');
-        const editor = document.querySelector('#txt-editor');
         editor.addEventListener('scroll', () => {
             lines.scrollTop = editor.scrollTop;
         });
 
-        const fontDecrement = document.getElementById('font-decrement');
-        const fontIncrement = document.getElementById('font-increment');
-        const colors = document.getElementById('colors');
+        async function fetchConfig() {
+            try {
+                const response = await fetch('/config');
+                if (!response.ok) throw new Error('Błąd odpowiedzi serwera');
+                const settings = await response.json();
+                console.log(settings);
+                return settings;
+            } catch (error) {
+                console.error('Błąd fetchowania konfiguracji:', error);
+                return { backgroundColor: '#FFFFFF', textColor: '#000000', fontSize: 16 };
+            }
+        }
 
+        async function saveConfig(settings) {
+            try {
+                const response = await fetch('/save-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings),
+                });
+                if (!response.ok) throw new Error('Błąd zapisu');
+            } catch (error) {
+                console.error('Błąd zapisywania', error);
+            }
+        }
+
+        function applySettings() {
+            editor.style.backgroundColor = currentBgColor;
+            editor.style.color = currentTextColor;
+            editor.style.fontSize = `${currentFontSize}px`;
+            lines.style.backgroundColor = currentBgColor;
+            lines.style.color = currentTextColor;
+            lines.style.fontSize = `${currentFontSize}px`;
+        }
+
+
+
+        document.addEventListener("DOMContentLoaded", checkRows);
+        editor.addEventListener('keyup', checkRows);
+        let index = 0;
+
+        // Zmiana kolorów
+        colorsBtn.addEventListener('click', async () => {
+            const config = await fetchConfig();
+            console.log(config);
+
+            if (index == 2) {
+                index = 0;
+            } else {
+                index++;
+            }
+
+
+
+            let themes = config.themes;
+            switch (index) {
+                case 0:
+                    current_theme = themes.default
+                    break;
+                case 1:
+                    current_theme = themes.dark
+                    break;
+                case 2:
+                    current_theme = themes.light
+                    break;
+            }
+
+            currentTextColor = current_theme.textColor
+            currentBgColor = current_theme.backgroundColor
+            //currentFontSize = current_theme.fontSize
+
+            lines.style.backgroundColor = currentBgColor
+            lines.style.color = currentTextColor
+            editor.style.backgroundColor = currentBgColor;
+            editor.style.color = currentTextColor;
+
+            applySettings();
+
+
+
+        });
+
+
+        // Inicjalizacja po załadowaniu strony
+        document.addEventListener('DOMContentLoaded', async () => {
+            const options = await fetchConfig();
+
+
+            currentBgColor = options.settings.backgroundColor;
+            currentTextColor = options.settings.textColor;
+            currentFontSize = options.settings.fontSize;
+
+            applySettings();
+            checkRows(); // Wyświetlenie numeracji linii
+        });
+
+
+        // Zmniejszenie wielkości 
         fontDecrement.addEventListener('click', () => {
-            const style = window.getComputedStyle(editor, null).getPropertyValue('font-size');
-            const currentSize = parseFloat(style);
-            editor.style.fontSize = (currentSize - 1) + 'px';
-            lines.style.fontSize = (currentSize - 1) + 'px';
+            currentFontSize = Math.max(10, currentFontSize - 1);
+            applySettings();
         });
 
         fontIncrement.addEventListener('click', () => {
-            const style = window.getComputedStyle(editor, null).getPropertyValue('font-size');
-            const currentSize = parseFloat(style);
-            editor.style.fontSize = (currentSize + 1) + 'px';
-            lines.style.fontSize = (currentSize + 1) + 'px';
-            console.log(currentSize + 'px');
+            currentFontSize = Math.min(30, currentFontSize + 1);
+            applySettings();
         });
 
-
+        // Zapis ustawień
+        saveSettingsBtn.addEventListener('click', async () => {
+            const newSettings = {
+                backgroundColor: currentBgColor,
+                textColor: currentTextColor,
+                fontSize: currentFontSize,
+            };
+            await saveConfig(newSettings);
+        });
     </script>
 </main>
-</form>

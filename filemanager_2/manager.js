@@ -3,12 +3,18 @@ const hbs = require('express-handlebars');
 const fs = require('fs');
 const path = require('path');
 const formidable = require('formidable');
+const cookieParser = require('cookie-parser');
+const Datastore = require('nedb');
+const nocache = require('nocache');
+const { log } = require('console');
+
 
 const app = express();
 
 // Baza folderu 
 const PLIKI_DIR = path.join(__dirname, 'PLIKI');
 const TEMPLATES_DIR = path.join(__dirname, 'public', 'fileTemplates');
+const USERS_DB = new Datastore({ filename: 'users.db', autoload: true });
 
 // Konfiguracja Handlebarow
 app.set('view engine', 'hbs');
@@ -19,6 +25,9 @@ app.engine('hbs', hbs({
             let extension = file.split('.').pop().toLowerCase();
             console.log('plik:', file, 'Extension:', extension); // Debug
             return icons[extension] || icons['default'];
+        },
+        eq: function (a, b) { //  helper eq
+            return a === b;
         }
     }
 }));
@@ -27,6 +36,10 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
+app.use(cookieParser());
+app.use(nocache());
+app.use(express.static('upload'))
+
 
 // def ikonek z biblioteki copy pasta z F1 
 const icons = {
@@ -72,6 +85,76 @@ function copyUnique(name, ext, dir) {
 
     return newName;
 }
+
+
+const checkAuth = (req, res, next) => {
+    const login = req.cookies.login;
+    if (!login || !USERS_DB.findOne({ login })) {
+        return res.redirect('/login');
+    }
+    req.user = { login };
+    next();
+};
+
+// Routing
+// app.get('/login', (req, res) => {
+//     res.render('login');
+// });
+
+// app.post('/login', (req, res) => {
+//     const { login, password } = req.body;
+//     USERS_DB.findOne({ login, password }, (err, user) => {
+//         if (!user) return res.render('error', { message: 'Błędne dane' });
+
+//         res.cookie('login', login, { maxAge: 30 * 1000 });
+//         res.redirect('/');
+//     });
+// });
+
+// app.get('/register', (req, res) => {
+//     res.render('register');
+// });
+
+// app.post('/register', (req, res) => {
+//     const { login, password } = req.body;
+
+//     USERS_DB.findOne({ login }, (err, user) => {
+//         if (user) return res.render('error', { message: 'Login zajęty' });
+
+//         // Tworzymy folder użytkownika
+//         const userDir = path.join(PLIKI_DIR, login);
+//         fs.mkdirSync(userDir, { recursive: true });
+
+//         USERS_DB.insert({ login, password }, (err) => {
+//             res.redirect('/login');
+//         });
+//     });
+// });
+
+// app.get('/logout', (req, res) => {
+//     res.clearCookie('login');
+//     res.redirect('/login');
+// });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Trasy
 app.get('/', (req, res) => {
@@ -224,22 +307,26 @@ app.post('/delete-file', (req, res) => {
 
 // Zmiana nazwy 
 app.post('/rename', (req, res) => {
-    let root = req.query.root || '';
+    let root = req.body.root
     const oldName = req.body.oldName;
     const newName = forbiddenChar(req.body.newName);
     const isDir = req.body.isDir === 'true';
 
     let oldPath = path.join(PLIKI_DIR, root, oldName);
     let newPath = path.join(PLIKI_DIR, root, newName);
+    console.log('Stara ścieżka:', oldPath);
 
     if (fs.existsSync(newPath)) {
         const stat = fs.statSync(newPath);
         const targetIsDir = stat.isDirectory();
 
-        if (isDir !== targetIsDir) {
+        if (isDir) {
             fs.rename(oldPath, newPath, (err) => {
-                if (err) console.log(err);
-                else res.redirect(`/?root=${encodeURIComponent(root)}`);
+                if (err) {
+                    console.log(err);
+                    return res.status(500).send('Błąd przy zmianie nazwy');
+                }
+                res.redirect(`/?root=${encodeURIComponent(root)}`);
             });
         } else {
 
@@ -261,10 +348,55 @@ app.post('/rename', (req, res) => {
     }
 });
 
+app.post('/file-rename', (req, res) => {
+    let root = req.body.root || '';
+    const oldName = req.body.oldName;
+    const newName = forbiddenChar(req.body.newName);
+
+    const oldPath = path.join(PLIKI_DIR, oldName);
+    let newPath = path.join(PLIKI_DIR, newName);
+
+
+    const oldExt = path.extname(oldName);
+    if (!path.extname(newName) || path.extname(newName) !== oldExt) {
+        newPath = path.join(PLIKI_DIR, root, newName + oldExt);
+    }
+
+    if (fs.existsSync(newPath)) {
+        const ext = path.extname(oldName);
+        const baseName = path.basename(newName, ext);
+        const uniqueName = copyUnique(baseName, ext, path.join(PLIKI_DIR, root));
+        newPath = path.join(PLIKI_DIR, root, uniqueName, ext);
+    }
+
+    fs.rename(oldPath, newPath, (err) => {
+        if (err) {
+            console.error('Error renaming file:', err);
+            return res.status(500).send('Error renaming file');
+        }
+
+        console.log(path.join(root, newPath));
+        const ext = path.extname(oldName);
+        const modifiedname = newName + ext;
+
+        res.redirect(`/edit?file=${encodeURIComponent(path.join(root, modifiedname))}`);
+    });
+});
+
+
+
 app.get('/edit', (req, res) => {
     const file = req.query.file;
     const filePath = path.join(PLIKI_DIR, file);
-    const root = path.dirname(file); // Pobierz katalog nadrzędny
+    const root = path.dirname(file);
+    const ext = path.extname(file).toLowerCase();
+
+    // Check if file is an image
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp'];
+    if (imageExtensions.includes(ext)) {
+        res.redirect(`/photo-edit/${encodeURIComponent(file)}`);
+        return;
+    }
 
     fs.readFile(filePath, 'utf8', (err, data) => {
         if (err) {
@@ -276,72 +408,112 @@ app.get('/edit', (req, res) => {
     });
 });
 
-// Zapis pliku (punkt d)
-app.post('/saveFile', (req, res) => {
-    const { filename, content } = req.body;
-    const root = req.body.root;
+app.get('/photo-edit', (req, res) => {
+    const file = req.query.file;
+    const filePath = path.join(PLIKI_DIR, file);
+    const root = path.dirname(file);
+    const ext = path.extname(file).toLowerCase();
 
-    console.log(JSON.stringify(content, null, 2));
-
-
-    const filePath = path.join(PLIKI_DIR, filename);
-    console.log(filename);
-    console.log(PLIKI_DIR);
-
-    console.log(filePath);
-
-    fs.writeFile(filePath, content, 'utf8', (err) => {
-        if (err) {
-            console.error('Błąd zapisu pliku:', err);
-            res.status(500).send('Błąd');
-        } else {
-            // const redirectUrl = path.join(PLIKI_DIR, filename);
-            res.redirect(`/edit?file=${filename}`);
-        }
-    });
-});
-
-
-
-
-app.post('/save-config', (req, res) => {
-    const configPath = path.join(PLIKI_DIR, 'config.json');
-    let config = req.body;
-
-    // Opcjonalne przekształcenie tablicy kolorów na obiekt
-    if (Array.isArray(config.assets?.colors)) {
-        config.assets.colors = {
-            red: config.assets.colors[0] || '#FF0000',
-            green: config.assets.colors[1] || '#00FF00',
-            blue: config.assets.colors[2] || '#0000FF'
-        };
+    // sprawdz czy to zdjecie
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp'];
+    if (!imageExtensions.includes(ext)) {
+        res.redirect(`/edit?file=${encodeURIComponent(file)}`);
+        return;
     }
 
-    fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8', (err) => {
+    // wczytaj filtry z config.json
+    const configPath = path.join(__dirname, 'config.json');
+    fs.readFile(configPath, 'utf8', (err, data) => {
         if (err) {
-            console.error('Błąd zapisu konfiguracji:', err);
-            res.status(500).send('Błąd');
-        } else {
-            res.status(200).send('OK');
+            console.error('blad odczytu config.json:', err);
+            res.redirect('/');
+            return;
+        }
+
+        try {
+            const config = JSON.parse(data);
+            const imageUrl = `/file-access/${encodeURIComponent(file)}`;
+
+            res.render('photo-editor', {
+                file,
+                imageUrl,
+                root,
+                filters: config.filters
+            });
+        } catch (error) {
+            console.error('blad parsowania config.json:', error);
+            res.redirect('/');
         }
     });
 });
 
-app.get('/colors', (req, res) => {
-    const configPath = path.join(PLIKI_DIR, 'config.json');
+// Add a new route to handle file access
+app.get('/file-access/:filepath', (req, res) => {
+    const filePath = path.join(PLIKI_DIR, decodeURIComponent(req.params.filepath));
+    res.sendFile(filePath);
+});
+
+// Zapis pliku (punkt d)
+app.post('/saveFile', (req, res) => {
+    const { filename, filter } = req.body;
+    const root = req.body.root;
+
+    // tylko przekieruj - filtr jest juz zastosowany przez CSS
+    res.redirect(`/?root=${encodeURIComponent(root)}`);
+});
+
+app.post('/savePhoto', (req, res) => {
+    const { filename, filter } = req.body;
+    const root = req.body.root;
+
+    // przekieruj spowrotem do edytora
+    res.redirect(`/photo-edit${encodeURIComponent(path.join(root, filename))}`);
+});
+
+app.post('/save-config', (req, res) => {
+    const configPath = 'config.json';
+    let config = req.body;
+
     fs.readFile(configPath, 'utf8', (err, data) => {
         if (err) {
-            console.error('Błąd odczytu pliku konfiguracyjnego:', err);
+            console.error('Błąd odczytu pliku', err);
+            return res.status(500).send('Błąd serwera');
+        }
+        try {
+
+            const configData = JSON.parse(data);
+
+            console.log(configData);
+
+            configData.settings.textColor = config.textColor;
+            configData.settings.fontSize = config.fontSize;
+            configData.settings.backgroundColor = config.backgroundColor;
+
+            const jsonData = JSON.stringify(configData, null, 4);
+
+            fs.writeFile(configPath, jsonData, (err, data) =>
+                err ? console.error('Błąd zapisu pliku', err) : console.log('Konfiguracja zapisana')
+            );
+        }
+        catch (parseErr) {
+            console.error('Błąd parsowania JSON:', parseErr);
+            return res.status(500).send('Błąd parsowania konfiguracji');
+        }
+    });
+});
+
+app.get('/config', (req, res) => {
+    const configPath = path.join('config.json');
+    fs.readFile(configPath, 'utf8', (err, data) => {
+        if (err) {
+            console.error('Błąd odczytu pliku', err);
             return res.status(500).send('Błąd serwera');
         }
         try {
             const configData = JSON.parse(data);
-            console.log(configData.assets.colors);
-
-            const colorsObject = configData.assets.colors;
-            const colorsArray = Object.values(colorsObject);
+            console.log(configData);
             res.header('Content-Type', 'application/json');
-            res.json(colorsArray);
+            res.send(configData);
         } catch (parseErr) {
             console.error('Błąd parsowania JSON:', parseErr);
             res.status(500).send('Błąd parsowania konfiguracji');
@@ -383,7 +555,7 @@ app.post('/upload', (req, res) => {
             });
         });
 
-        res.redirect(`/? root = ${encodeURIComponent(root)}`);
+        res.redirect(`/?root=${encodeURIComponent(root)}`);
     });
 });
 
