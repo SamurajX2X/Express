@@ -12,6 +12,18 @@
 <body>
     <header>
         <h1>File Manager</h1>
+        <div class="nav-menu">
+            {{#if user}}
+            <!-- Widok dla zalogowanego użytkownika -->
+            <span class="user-greeting">Witaj, {{user.login}}!</span>
+            <a href="/logout" class="nav-link">Wyloguj</a>
+            {{else}}
+            <!-- Widok dla gościa -->
+            <a href="/login" class="nav-link">Logowanie</a>
+            <a href="/register" class="nav-link">Rejestracja</a>
+            {{/if}}
+        </div>
+        </nav>
     </header>
     <main>
         {{{body}}}

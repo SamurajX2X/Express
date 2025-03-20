@@ -1,106 +1,96 @@
 <head>
     <link rel="stylesheet" href="photo-style.css">
+    <title>Edytor zdjęć</title>
 </head>
 
 <body>
     <nav class="navbar">
         <a id="backhref" href="/?root={{./root}}">Powrót</a>
-        <div class="filter-panel">
-            <button id="filterBtn" class="filter-btn">Wybierz filtr</button>
-            <div id="filterContent" class="filter-content">
-                <a href="#" class="filter-option" data-filter="none" data-value="">
-                    <div class="filter-preview">
-                        <img src="{{imageUrl}}" alt="Original">
-                    </div>
-                    <span>Original</span>
-                </a>
-                {{#each filters}}
-                <a href="#" class="filter-option" data-filter="{{this.name}}" data-value="{{this.value}}">
-                    <div class="filter-preview">
-                        <img src="{{../imageUrl}}" alt="{{this.name}}" style="filter: {{this.name}}({{this.value}})">
-                    </div>
-                    <span>{{this.name}}</span>
-                </a>
-                {{/each}}
-            </div>
+
+        <button id="filterBtn">Wybierz filtr</button>
+        <div id="filterContent" class="filter-content">
+            <a href="#" class="filter-option" data-filter="none">
+                <div class="filter-preview">
+                    <img src="{{imageUrl}}">
+                </div>
+                <span>Original</span>
+            </a>
+            {{#each filters}}
+            <a href="#" class="filter-option" data-filter="{{this.name}}" data-value="{{this.value}}">
+                <div class="filter-preview">
+                    <img src="{{../imageUrl}}" style="filter: {{this.name}}({{this.value}})">
+                </div>
+                <span>{{this.name}}</span>
+            </a>
+            {{/each}}
         </div>
     </nav>
 
-    <main id="photo-edit">
+    <main>
         <div class="photo-edit">
-            <img src="{{imageUrl}}" alt="Zdjęcie do edycji" style="max-width: 100%; height: auto;">
+            <img src="{{imageUrl}}" alt="Zdjęcie">
             <canvas id="imageCanvas" style="display: none;"></canvas>
             <form id="saveForm">
                 <input type="hidden" name="filename" value="{{file}}">
                 <input type="hidden" name="root" value="{{root}}">
-                <input type="hidden" name="filter" id="selectedFilter">
                 <button type="button" class="save-btn">Zapisz</button>
             </form>
         </div>
     </main>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const filterBtn = document.getElementById('filterBtn');
-            const filterContent = document.getElementById('filterContent');
-            const mainImage = document.querySelector('.photo-edit img');
-            const canvas = document.getElementById('imageCanvas');
-            const ctx = canvas.getContext('2d');
-            const filterOptions = document.querySelectorAll('.filter-option');
-            const selectedFilterInput = document.getElementById('selectedFilter');
+        const filterBtn = document.getElementById('filterBtn');
+        const filterContent = document.getElementById('filterContent');
+        const mainImage = document.querySelector('.photo-edit img');
+        const canvas = document.getElementById('imageCanvas');
+        const ctx = canvas.getContext('2d');
 
-            // czekaj az zdjecie sie zaladuje
-            mainImage.onload = () => {
-                canvas.width = mainImage.naturalWidth;
-                canvas.height = mainImage.naturalHeight;
+        // Zaladowanie wymiarow
+        mainImage.onload = () => {
+            canvas.width = mainImage.naturalWidth;
+            canvas.height = mainImage.naturalHeight;
+        }
+
+        // Przelaczanie filtrow
+        filterBtn.onclick = () => {
+            filterContent.classList.toggle('show');
+            filterBtn.textContent = filterContent.classList.contains('show') ? 'Ukryj filtry' : 'Wybierz filtr';
+        }
+
+        // Stosowanie filtrow
+        document.querySelectorAll('.filter-option').forEach(option => {
+            option.onclick = (e) => {
+                e.preventDefault();
+                const filter = option.dataset.filter;
+                const value = option.dataset.value;
+
+                if (filter === 'none') {
+                    mainImage.style.filter = 'none';
+                } else {
+                    mainImage.style.filter = `${filter}(${value || '100%'})`;
+                }
             }
-
-            filterBtn.addEventListener('click', () => {
-                filterContent.classList.toggle('show');
-                filterBtn.textContent = filterContent.classList.contains('show') ? 'Ukryj filtry' : 'Wybierz filtr';
-            });
-
-            filterOptions.forEach(option => {
-                option.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const filter = option.dataset.filter;
-                    const value = option.dataset.value;
-
-                    selectedFilterInput.value = filter;
-                    mainImage.style.filter = filter === 'none' ? 'none' : `${filter}(${value || '100%'})`;
-                });
-            });
-
-            document.querySelector('.save-btn').addEventListener('click', () => {
-                // narysuj zdjecie z filtrem na canvas
-                ctx.filter = mainImage.style.filter;
-                ctx.drawImage(mainImage, 0, 0);
-
-                // konwertuj canvas na blob
-                canvas.toBlob((blob) => {
-                    const formData = new FormData();
-                    formData.append('image', blob, 'filtered-image.jpg');
-                    formData.append('filename', document.querySelector('input[name="filename"]').value);
-                    formData.append('root', document.querySelector('input[name="root"]').value);
-                    formData.append('filter', document.getElementById('selectedFilter').value);
-
-                    // wyslij do serwera
-                    fetch('/savePhoto', {
-                        method: 'POST',
-                        body: formData
-                    })
-                        .then(response => {
-                            if (response.ok) {
-                                window.location.href = `/?root=${encodeURIComponent(document.querySelector('input[name="root"]').value)}`;
-                            } else {
-                                console.error('blad zapisu');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('blad:', error);
-                        });
-                }, 'image/jpeg');
-            });
         });
+
+        // Zapisanie zdjecia
+        document.querySelector('.save-btn').onclick = () => {
+            ctx.filter = mainImage.style.filter;
+            ctx.drawImage(mainImage, 0, 0);
+
+            canvas.toBlob(blob => {
+                const form = document.getElementById('saveForm');
+                const formData = new FormData(form); // Automatycznie dodaje wszystkie pola formularza
+                formData.append('image', blob, 'filtered-image.jpg');
+
+                fetch('/savePhoto', {
+                    method: 'POST',
+                    body: formData
+                }).then(() => {
+                    window.location.reload();
+                });
+            }, 'image/jpeg');
+        }
     </script>
 </body>
+
+</html>

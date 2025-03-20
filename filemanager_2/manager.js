@@ -15,6 +15,9 @@ const app = express();
 const PLIKI_DIR = path.join(__dirname, 'PLIKI');
 const TEMPLATES_DIR = path.join(__dirname, 'public', 'fileTemplates');
 const USERS_DB = new Datastore({ filename: 'users.db', autoload: true });
+const { uuid } = require('uuidv4');
+// Przechowywanie sesji w pamięci
+const sessions = {};
 
 // Konfiguracja Handlebarow
 app.set('view engine', 'hbs');
@@ -39,7 +42,11 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(nocache());
 app.use(express.static('upload'))
-
+app.use((req, res, next) => {
+    const sessionId = req.cookies.sessionId;
+    res.locals.user = sessions[sessionId] || null;
+    next();
+});
 
 // def ikonek z biblioteki copy pasta z F1 
 const icons = {
@@ -67,9 +74,22 @@ const forbiddenChar = (name) => {
 
 // do projektu z plikami wygodniej niz encodeURIcomponent 
 // z minusow zamienia po prostu na %% co tez moze ew byc gorsze niz zastepowanie _ 
-// 
 
 
+
+
+
+// Czyszczenie nieaktywnych sesji co 60 sekund
+setInterval(() => {
+    const now = Date.now();
+    Object.entries(sessions).forEach(([sessionId, session]) => {
+
+        if (now - session.lastActive > 30000) {
+            delete sessions[sessionId];
+            console.log(`Usunięto nieaktywną sesję: ${sessionId}`);
+        }
+    });
+}, 60000); // Sprawdzaj co 60 sekund
 
 // funkcja do inkrementowania przy kopiach
 function copyUnique(name, ext, dir) {
@@ -88,56 +108,73 @@ function copyUnique(name, ext, dir) {
 
 
 const checkAuth = (req, res, next) => {
-    const login = req.cookies.login;
-    if (!login || !USERS_DB.findOne({ login })) {
-        return res.redirect('/login');
+    const sessionId = req.cookies.sessionId;
+    const session = sessions[sessionId];
+
+    if (session) {
+        // Resetuj timer sesji przy  interakcji
+        session.lastActive = Date.now();
+        req.user = session;
+        next();
+    } else {
+        res.redirect('/login');
     }
-    req.user = { login };
-    next();
 };
+// Logowanie
+app.get('/login', (req, res) => {
+    res.render('login');
+});
 
-// Routing
-// app.get('/login', (req, res) => {
-//     res.render('login');
-// });
+app.post('/login', (req, res) => {
+    const { login, password } = req.body;
 
-// app.post('/login', (req, res) => {
-//     const { login, password } = req.body;
-//     USERS_DB.findOne({ login, password }, (err, user) => {
-//         if (!user) return res.render('error', { message: 'Błędne dane' });
+    USERS_DB.findOne({ login, password }, (err, user) => {
+        if (!user) return res.render('error', { message: 'Błędne dane' });
 
-//         res.cookie('login', login, { maxAge: 30 * 1000 });
-//         res.redirect('/');
-//     });
-// });
+        const sessionId = uuid();
+        sessions[sessionId] = {
+            login: user.login,
+            createdAt: Date.now()
+        };
 
-// app.get('/register', (req, res) => {
-//     res.render('register');
-// });
+        res.cookie('sessionId', sessionId, {
+            httpOnly: true,
+            maxAge: 30 * 1000 // 30 sekund
+        });
+        res.redirect('/');
+    });
+});
 
-// app.post('/register', (req, res) => {
-//     const { login, password } = req.body;
+// Rejestracja
+app.get('/register', (req, res) => {
+    res.render('register');
+});
 
-//     USERS_DB.findOne({ login }, (err, user) => {
-//         if (user) return res.render('error', { message: 'Login zajęty' });
+app.post('/register', (req, res) => {
+    const { login, password } = req.body;
 
-//         // Tworzymy folder użytkownika
-//         const userDir = path.join(PLIKI_DIR, login);
-//         fs.mkdirSync(userDir, { recursive: true });
+    USERS_DB.findOne({ login }, (err, user) => {
+        if (user) return res.render('error', { message: 'Login zajęty' });
 
-//         USERS_DB.insert({ login, password }, (err) => {
-//             res.redirect('/login');
-//         });
-//     });
-// });
+        const newUser = {
+            _id: uuid(),
+            login,
+            password,
+        };
 
-// app.get('/logout', (req, res) => {
-//     res.clearCookie('login');
-//     res.redirect('/login');
-// });
+        USERS_DB.insert(newUser, (err) => {
+            res.redirect('/login');
+        });
+    });
+});
 
-
-
+// Wylogowanie
+app.get('/logout', (req, res) => {
+    const sessionId = req.cookies.sessionId;
+    delete sessions[sessionId];
+    res.clearCookie('sessionId');
+    res.redirect('/login');
+});
 
 
 
@@ -157,7 +194,7 @@ const checkAuth = (req, res, next) => {
 
 
 // Trasy
-app.get('/', (req, res) => {
+app.get('/', checkAuth, (req, res) => {
     let root = req.query.root || ''; // default 
     let fullPath = path.join(PLIKI_DIR, root);
     console.log(req.query.fullPath);
@@ -203,7 +240,7 @@ app.get('/', (req, res) => {
 });
 
 // Tworzenie katalogow 
-app.post('/create-directory', (req, res) => {
+app.post('/create-directory', checkAuth, (req, res) => {
     let root = req.body.root || '';
     let rawName = req.body.folder;
     let dirname = forbiddenChar(rawName);
@@ -231,7 +268,7 @@ app.post('/create-directory', (req, res) => {
 
 // Tworzenie plikow
 
-app.post('/create-file', (req, res) => {
+app.post('/create-file', checkAuth, (req, res) => {
     let root = req.body.root || '';
     let rawName = req.body.filename;
     let filename = forbiddenChar(rawName);
@@ -275,7 +312,7 @@ app.post('/create-file', (req, res) => {
 
 
 // Usuwanie katalogu calego z plikami
-app.post('/delete-directory', (req, res) => {
+app.post('/delete-directory', checkAuth, (req, res) => {
     let root = req.body.root || '';
     const dirname = req.body.dirname;
     const dirPath = path.join(PLIKI_DIR, root, dirname);
@@ -296,7 +333,7 @@ app.post('/delete-directory', (req, res) => {
     res.redirect(`/?root=${encodeURIComponent(root)}`);
 });
 // Usuwanie pliku
-app.post('/delete-file', (req, res) => {
+app.post('/delete-file', checkAuth, (req, res) => {
     let root = req.body.root || '';
     const filename = req.body.filename;
     const filePath = path.join(PLIKI_DIR, root, filename);
@@ -306,7 +343,7 @@ app.post('/delete-file', (req, res) => {
 });
 
 // Zmiana nazwy 
-app.post('/rename', (req, res) => {
+app.post('/rename', checkAuth, (req, res) => {
     let root = req.body.root
     const oldName = req.body.oldName;
     const newName = forbiddenChar(req.body.newName);
@@ -348,7 +385,7 @@ app.post('/rename', (req, res) => {
     }
 });
 
-app.post('/file-rename', (req, res) => {
+app.post('/file-rename', checkAuth, (req, res) => {
     let root = req.body.root || '';
     const oldName = req.body.oldName;
     const newName = forbiddenChar(req.body.newName);
@@ -385,13 +422,13 @@ app.post('/file-rename', (req, res) => {
 
 
 
-app.get('/edit', (req, res) => {
+app.get('/edit', checkAuth, (req, res) => {
     const file = req.query.file;
     const filePath = path.join(PLIKI_DIR, file);
     const root = path.dirname(file);
     const ext = path.extname(file).toLowerCase();
 
-    // Check if file is an image
+    // czy zdj???
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp'];
     if (imageExtensions.includes(ext)) {
         res.redirect(`/photo-edit/${encodeURIComponent(file)}`);
@@ -408,20 +445,20 @@ app.get('/edit', (req, res) => {
     });
 });
 
-app.get('/photo-edit', (req, res) => {
+app.get('/photo-edit', checkAuth, (req, res) => {
     const file = req.query.file;
     const filePath = path.join(PLIKI_DIR, file);
     const root = path.dirname(file);
     const ext = path.extname(file).toLowerCase();
 
-    // sprawdz czy to zdjecie
+    //  czy to zdjecie
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp'];
     if (!imageExtensions.includes(ext)) {
         res.redirect(`/edit?file=${encodeURIComponent(file)}`);
         return;
     }
 
-    // wczytaj filtry z config.json
+    //  filtry z config
     const configPath = path.join(__dirname, 'config.json');
     fs.readFile(configPath, 'utf8', (err, data) => {
         if (err) {
@@ -447,30 +484,62 @@ app.get('/photo-edit', (req, res) => {
     });
 });
 
-// Add a new route to handle file access
+// Pobieranie pliku
 app.get('/file-access/:filepath', (req, res) => {
     const filePath = path.join(PLIKI_DIR, decodeURIComponent(req.params.filepath));
     res.sendFile(filePath);
 });
 
 // Zapis pliku (punkt d)
-app.post('/saveFile', (req, res) => {
-    const { filename, filter } = req.body;
-    const root = req.body.root;
+app.post('/saveFile', checkAuth, (req, res) => {
+    const { filename, root, content } = req.body;
+    const filePath = path.join(PLIKI_DIR, root, filename);
 
-    // tylko przekieruj - filtr jest juz zastosowany przez CSS
-    res.redirect(`/?root=${encodeURIComponent(root)}`);
+    fs.writeFile(filePath, content, 'utf8', (err) => {
+        if (err) {
+            console.error('blad zapisu pliku:', err);
+            return res.status(500).send('blad zapisu pliku');
+        }
+
+        // przekieruj z powrotem do edytora
+        res.redirect(`/edit?file=${encodeURIComponent(path.join(root, filename))}`);
+    });
 });
 
-app.post('/savePhoto', (req, res) => {
-    const { filename, filter } = req.body;
-    const root = req.body.root;
+app.post('/savePhoto', checkAuth, (req, res) => {
+    const form = new formidable.IncomingForm();
+    form.uploadDir = PLIKI_DIR;  // Tymczasowy folder dla uploadu
 
-    // przekieruj spowrotem do edytora
-    res.redirect(`/photo-edit${encodeURIComponent(path.join(root, filename))}`);
+    form.parse(req, (err, fields, files) => {
+        if (err) {
+            console.error('blad formidable:', err);
+            return res.status(500).send('blad zapisu');
+        }
+
+        const { filename, root } = fields;
+        const file = files.image;
+
+
+        const fileObj = Array.isArray(file) ? file[0] : file;
+
+        if (!fileObj) {
+            console.error('brak pliku');
+            return res.status(400).send('brak pliku');
+        }
+
+        const filePath = path.join(PLIKI_DIR, filename);
+
+        // Przenieś plik
+        fs.rename(fileObj.path, filePath, (err) => {
+            if (err) {
+                console.error('blad zapisu:', err);
+                return res.status(500).send('blad zapisu');
+            }
+            res.sendStatus(200);
+        });
+    });
 });
-
-app.post('/save-config', (req, res) => {
+app.post('/save-config', checkAuth, (req, res) => {
     const configPath = 'config.json';
     let config = req.body;
 
@@ -502,7 +571,7 @@ app.post('/save-config', (req, res) => {
     });
 });
 
-app.get('/config', (req, res) => {
+app.get('/config', checkAuth, (req, res) => {
     const configPath = path.join('config.json');
     fs.readFile(configPath, 'utf8', (err, data) => {
         if (err) {
@@ -522,7 +591,7 @@ app.get('/config', (req, res) => {
 });
 
 // Upload do podkatalogu
-app.post('/upload', (req, res) => {
+app.post('/upload', checkAuth, (req, res) => {
     const form = new formidable.IncomingForm();
 
     form.uploadDir = PLIKI_DIR; // Bazowo gdyby nie udalo sie dac pliku do folderu to pojdzie do main plikow
