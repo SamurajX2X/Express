@@ -380,8 +380,7 @@ dialog button[type="button"]:hover {
     width: 90px;
 }
 
-
-/* Nowe style - Navbar i formularze */
+/* Navbar i formularze */
 .navbar {
     display: flex;
     justify-content: space-between;
@@ -499,6 +498,7 @@ dialog button[type="button"]:hover {
     background: rgba(255, 68, 68, 0.1);
 }
 
+/* Media queries */
 @media (max-width: 768px) {
     .navbar {
         flex-direction: column;
